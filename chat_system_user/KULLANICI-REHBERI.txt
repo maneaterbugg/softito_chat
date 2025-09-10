@@ -1,0 +1,43 @@
+--------------------- KULLANICI GIRISI ICIN TALIMATLAR ------------------------
+
+tünel açıyoruz 	               ========komut x
+sonrasında servera baglnıyoruz ========komut y
+
+not= username, ip ve sifre admine sorulacaktir.
+
+KOMUT X= ssh -fN -L 1161:127.0.0.1:1161 username@SUNUCU_IP -o ExitOnForwardFailure=yes
+
+KOMUT Y= python3 chat_client.py
+
+
+
+NOT: EGER TUNEL ZATEN ACIKSA SADECE 2.komutu yazsaniz yeter
+     TUNELI ISINIZ BITTIKTEN SONRA KAPATMANIZ SIDDETLE TAVSIYE EDILIR 
+     1-) KOMUT A
+     2-) EGER TUNEL ACIP ACMADIGINIZI SORGULAMAK ISTIYORSANIZ 
+	      YANI GUNCEL TUNELI GORMEK ISTIYORSANIZ KOMUT B
+
+
+
+KOMUT A = pkill -f 'ssh.*127.0.0.1:1161' || true
+KOMUT B = ss -ltnp | grep 1161
+
+  
+KOMUT X= tunel ac ve giris yap
+KOMUT Y= kahveye giris yap
+
+
+================================
+
+tr karakterleri yazabilmek için:
+locale                      		  # ÇIKTI’da LANG/LC_* satırları ...UTF-8 olmalı
+sudo locale-gen tr_TR.UTF-8 en_US.UTF-8
+sudo update-locale LANG=tr_TR.UTF-8
+# (systemd varsa) sudo localectl set-locale LANG=tr_TR.UTF-8
+
+===============================
+
+---Emre D. Ozberk
+
+================================
+

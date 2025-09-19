@@ -5,7 +5,11 @@ sonrasında servera baglnıyoruz ========komut y
 
 not= username, ip ve sifre admine sorulacaktir.
 
-KOMUT X= ssh -fN -L 1161:127.0.0.1:1161 username@SUNUCU_IP -o ExitOnForwardFailure=yes
+KOMUT X= ssh -fN \
+ 		 	-L 1161:127.0.0.1:1161 \
+  			-L 8000:127.0.0.1:8000 \
+  			-o ExitOnForwardFailure=yes \
+ 		 	 username@SUNUCU_IP
 
 KOMUT Y= python3 chat_client.py
 
@@ -20,7 +24,8 @@ NOT: EGER TUNEL ZATEN ACIKSA SADECE KOMUT Y'yi yazsaniz yeter
 
 
 KOMUT A = pkill -f 'ssh.*127.0.0.1:1161' || true
-KOMUT B = ss -ltnp | grep 1161
+		  pkill -f 'ssh.*127.0.0.1:8000' || true
+KOMUT B = ss -ltnp | grep -E ':1161|:8000'
 
   
 KOMUT X= tunel ac ve giris yap
@@ -40,5 +45,6 @@ sudo update-locale LANG=tr_TR.UTF-8
 ---Emre D. Ozberk
 
 ================================
+
 
 

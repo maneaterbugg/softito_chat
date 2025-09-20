@@ -51,6 +51,41 @@ def eat_escape_sequence(win):
         try: win.nodelay(False)
         except: pass
 
+# ===== TKM satırlarını Türkçeleştir =====
+def render_tkm_line(line: str) -> str:
+    if line.startswith("TKM:CHALLENGE"):
+        who = line.split("from=", 1)[1]
+        return f"[TKM] Meydan okuma geldi: {who}\n      Kabul: /tkm kabul  |  Red: /tkm red"
+    if line.startswith("TKM:CONFIRM"):
+        return "[TKM] Meydan okuma kabul edildi. Her turda /tkm seç tas|kagit|makas"
+    if line.startswith("TKM:PROMPT"):
+        r = line.split("round=", 1)[1]
+        return f"[TKM] Tur {r} → /tkm seç tas|kagit|makas"
+    if line.startswith("TKM:WAITING"):
+        return "[TKM] Rakip seçimi bekleniyor…"
+    if line.startswith("TKM:DECLINE"):
+        by = line.split("by=", 1)[1]
+        return f"[TKM] {by} meydan okumayı reddetti."
+    if line.startswith("TKM:CANCEL"):
+        by = line.split("by=", 1)[1]
+        return f"[TKM] Oyun iptal edildi (by {by})."
+    if line.startswith("TKM:ROUND"):
+        line = line.replace("TKM:ROUND", "[TKM Tur]")
+        line = line.replace(" winner=", " kazanan=")
+        return line
+    if line.startswith("TKM:RESULT"):
+        line = line.replace("TKM:RESULT", "[TKM Maç]")
+        line = line.replace("match", "Maç")
+        line = line.replace(" winner=", " kazanan=")
+        return line
+    if line.startswith("TKM:SKOR"):
+        return "[TKM] Skorlar: " + line.split(" ", 1)[1]
+    if line.startswith("TKM:INFO"):
+        return "[TKM] " + line.split(" ", 1)[1]
+    if line.startswith("TKM:ERR"):
+        return "[TKM:Hata] " + line.split(" ", 1)[1]
+    return line
+
 # ===== Alım döngüsü =====
 def recv_loop(sock, msg_win, user_win, lock, stdscr, inp_win):
     global LAST_FILE_URL
@@ -66,6 +101,14 @@ def recv_loop(sock, msg_win, user_win, lock, stdscr, inp_win):
                 line, buf = buf.split(b"\n", 1)
                 text = line.decode("utf-8", errors="replace").strip()
 
+                # --- TKM ---
+                if text.startswith("TKM:"):
+                    with lock:
+                        msg_win.addstr(render_tkm_line(text) + "\n")
+                        msg_win.refresh()
+                    continue
+
+                # --- Dosya URL’leri ---
                 if text.startswith("FILEURL "):
                     info = text.split()
                     from_ = next((p.split("=",1)[1] for p in info if p.startswith("from=")), "?")
@@ -126,14 +169,15 @@ def recv_loop(sock, msg_win, user_win, lock, stdscr, inp_win):
 # ===== Handshake =====
 def h_print(hand_top, lines):
     hand_top.erase()
+    draw_box_ascii(hand_top)
     maxy, maxx = hand_top.getmaxyx()
-    start = max(0, len(lines) - maxy)
-    y = 0
+    start = max(0, len(lines) - (maxy - 2))
+    y = 1
     for line in lines[start:]:
-        try: hand_top.addnstr(y, 1, line, maxx - 2)
+        try: hand_top.addnstr(y, 2, line, maxx - 4)
         except curses.error: pass
         y += 1
-        if y >= maxy: break
+        if y >= maxy - 1: break
     hand_top.refresh()
 
 def h_input(hand_inp, prompt, secret=False):
@@ -147,7 +191,6 @@ def h_input(hand_inp, prompt, secret=False):
                 hand_inp.addnstr(1, 2+len(prompt), buf, hand_inp.getmaxyx()[1]-len(prompt)-4)
         except curses.error: pass
         hand_inp.refresh()
-
         ch = hand_inp.get_wch()
         if not isinstance(ch, str): continue
         if ch == "\x1b": eat_escape_sequence(hand_inp); continue
@@ -193,12 +236,12 @@ def handshake(stdscr, sock):
 
             lines.append(text); h_print(hand_top, lines)
 
-# ===== Tamamlama paneli =====
-def show_completion_panel(stdscr, items, inp_h=3):
+# ===== Tamamlama paneli (TAB destekli) =====
+def show_completion_panel(stdscr, items, inp_h=3, selected=-1):
     if not items: return None
     maxy, maxx = stdscr.getmaxyx()
     h = min(len(items) + 2, max(5, maxy // 3))
-    w = min(max((len(x) for x in items), default=10) + 4, maxx - 2)
+    w = min(max((len(x) for x in items), default=10) + 6, maxx - 2)
     y = maxy - inp_h - h; x = 0
     win = curses.newwin(h, w, y, x)
     try:
@@ -207,8 +250,9 @@ def show_completion_panel(stdscr, items, inp_h=3):
         try: win.addnstr(0, 2, title, w-4)
         except: pass
         row = 1
-        for it in items[:h-2]:
-            try: win.addnstr(row, 2, it, w-4)
+        for i, it in enumerate(items[:h-2]):
+            prefix = "> " if i == selected else "  "
+            try: win.addnstr(row, 2, prefix + it, w-4)
             except: pass
             row += 1
         win.refresh()
@@ -221,8 +265,8 @@ def close_panel(panel):
         except: pass
     return None
 
-def path_complete(token: str):
-    if not token: token = ""
+def path_candidates(base_token: str):
+    token = base_token or ""
     expanded = os.path.expanduser(token)
     d = expanded if os.path.isdir(expanded) else (os.path.dirname(expanded) or ".")
     prefix = os.path.basename(expanded)
@@ -234,24 +278,8 @@ def path_complete(token: str):
         else:
             ext = os.path.splitext(p)[1].lower()
             if ext in MEDIA_EXTS: cands.append(p)
-    return cands, d, prefix
-
-def complete_send_buffer(buf: str, stdscr, panel, inp_h=3):
-    try: base = buf.split(" ", 1)[1]
-    except IndexError: base = ""
-    cands, d, prefix = path_complete(base)
-    if not cands:
-        panel = close_panel(panel); return buf, panel
-    if len(cands) == 1:
-        c = cands[0]
-        finished = os.path.join(os.path.dirname(base or ""), os.path.basename(c))
-        if c.endswith(os.sep): finished += os.sep
-        panel = close_panel(panel); return "/send " + finished, panel
     names = [os.path.basename(x.rstrip(os.sep)) + ("/" if x.endswith(os.sep) else "") for x in cands]
-    common = os.path.commonprefix(names)
-    new_base = os.path.join(os.path.dirname(base or ""), common)
-    panel = close_panel(panel); panel = show_completion_panel(stdscr, names, inp_h=inp_h)
-    return "/send " + new_base, panel
+    return cands, names
 
 # ===== Dosya gönder =====
 def resolve_send_path(arg: str) -> str | None:
@@ -287,7 +315,6 @@ def send_file(sock, path, msg_win=None, lock=None):
 # ===== MAIN =====
 def main(stdscr):
     global LAST_FILE_URL
-    # Son linki yerelden yükle (varsa)
     try:
         if os.path.isfile(LAST_URL_FILE):
             with open(LAST_URL_FILE, "r", encoding="utf-8") as f:
@@ -318,7 +345,12 @@ def main(stdscr):
     threading.Thread(target=recv_loop, args=(sock, msg_win, user_win, lock, stdscr, inp_win),
                      daemon=True).start()
 
-    buf = ""; comp_panel = None
+    buf = ""
+    comp_panel = None
+    comp_items = []     # gösterilecek (basename) adaylar
+    comp_full   = []    # tam yollar (dir/ + isim)
+    comp_idx = -1       # seçili index
+
     while True:
         inp_win.erase(); draw_box_ascii(inp_win)
         try: inp_win.addstr(1, 2, ">" + buf)
@@ -327,31 +359,73 @@ def main(stdscr):
 
         ch = inp_win.get_wch()
         if not isinstance(ch, str): continue
-        if ch == "\x1b":
-            eat_escape_sequence(inp_win); comp_panel = close_panel(comp_panel); continue
 
-        if ch == "\t":
-            if buf.startswith("/send"):
-                buf, comp_panel = complete_send_buffer(buf, stdscr, comp_panel, inp_h=3)
+        if ch == "\x1b":  # ESC
+            eat_escape_sequence(inp_win)
+            comp_items, comp_full, comp_idx = [], [], -1
+            comp_panel = close_panel(comp_panel)
             continue
 
-        comp_panel = close_panel(comp_panel)
+        if ch == "\t":
+            # Yalnızca /send için tamamla
+            if not buf.startswith("/send"):
+                continue
+            try:
+                base = buf.split(" ", 1)[1]
+            except IndexError:
+                base = ""
+
+            # İlk TAB → adayları hesapla, ortak ön eki yaz, paneli aç
+            if not comp_items:
+                cands_full, names = path_candidates(base)
+                if not names:
+                    continue
+                # Ortak ön ek
+                common = os.path.commonprefix(names)
+                new_base = os.path.join(os.path.dirname(base or ""), common)
+                # Buf'u güncelle
+                buf = "/send " + new_base
+                # State/panel
+                comp_full = cands_full
+                comp_items = names
+                comp_idx = -1
+                comp_panel = close_panel(comp_panel)
+                comp_panel = show_completion_panel(stdscr, comp_items, inp_h=3, selected=-1)
+            else:
+                # Sonraki TAB'lar → adaylar arasında dolaş
+                comp_idx = (comp_idx + 1) % len(comp_items)
+                chosen = comp_full[comp_idx]
+                finished = os.path.join(os.path.dirname(base or ""), os.path.basename(chosen))
+                if chosen.endswith(os.sep): finished += os.sep
+                buf = "/send " + finished
+                comp_panel = close_panel(comp_panel)
+                comp_panel = show_completion_panel(stdscr, comp_items, inp_h=3, selected=comp_idx)
+            continue
+
+        # TAB döngüsü dışındaki herhangi bir tuş state'i sıfırlar (Enter hariç aşağıda)
+        if ch not in ("\n",):
+            comp_items, comp_full, comp_idx = [], [], -1
+            comp_panel = close_panel(comp_panel)
 
         if ch == "\n":
             text = buf.strip(); buf = ""
+            comp_items, comp_full, comp_idx = [], [], -1
+            comp_panel = close_panel(comp_panel)
+
             if text.startswith("/"):
                 if text == "/help":
                     with lock:
                         safe_addstr(msg_win,
-                            "Kullanılabilir komutlar:\n"
-                            "  /help           → Bu yardım ekranını gösterir\n"
-                            "  /clear          → (Admin) Sohbeti temizler\n"
-                            "  /kick KULLANICI → (Admin) Kullanıcıyı atar\n"
-                            "  /send PATH      → Dosya gönder (görsel/video)\n"
-                            "  /cls            → Ekranı yerelde temizle\n"
-                            "  /lasturl        → Son dosya linkini tekrar göster\n"
-                            "  /open           → Son dosya linkini tarayıcıda aç\n"
-                            "  /quit           → Sohbetten çık")
+                            "Komutlar:\n"
+                            "  /tkm @kisi        → Taş-Kâğıt-Makas meydan oku (3 tur)\n"
+                            "  /tkm kabul | /tkm red | /tkm iptal\n"
+                            "  /tkm seç tas|kagit|makas\n"
+                            "  /tkm skor         → Skorlarını gör\n"
+                            "  /send PATH        → Dosya gönder (görsel/video)\n"
+                            "  /lasturl          → Son dosya linkini göster\n"
+                            "  /open             → Son linki tarayıcıda aç\n"
+                            "  /cls              → Ekranı temizle (yerel)\n"
+                            "  /quit             → Çıkış\n")
                     continue
                 if text in ("/cls", "/clearme"):
                     msg_win.erase(); msg_win.refresh(); continue

@@ -1,0 +1,33 @@
+
+
+========================  Örnek public key’ler (sunucuya gonderilecek içerik) ======
+
+not: alttaki komuttaki isimleri kendi isminiz yapin. herhangi bir katkisi yok. kimin public
+     keyi kimin onu  belirlemek amaciyla admin tarafindan siddetli onerilir.
+
+- ssh-keygen -t ed25519 -C "ahmet@mac" -f ~/.ssh/id_ed25519
+# ve
+- ssh-keygen -t ed25519 -C "mehmet@mac" -f ~/.ssh/id_ed25519
+
+
+# ahmet'in gönderdiği .pub satırı (örnek)
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEg6k3O3t5b0Wc9a2K1YdY+1wq6Qq3m3mXk9D9xw1fJ2 ahmet@mac
+
+# mehmet'in gönderdiği .pub satırı (örnek)
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDpQyFQvQ9p5jv7Q1z1sE7gqk9mQm8o4R7yJm2Pq4tV mehmet@mac
+
+
+
+================ (Öğrenci tarafı) Sunucuya tünel kurma ve bağlanma — tam komut =====
+
+- ssh -N \
+  -L 1161:127.0.0.1:1161 \
+  -L 8000:127.0.0.1:8000 \
+  chat@server_ip 
+
+# yeni bir terminal penceresi/sekmesi açıp:
+
+- python3 /path/to/client.py 127.0.0.1 1161
+
+Dosya linkleri  http://127.0.0.1:8000/
+... olarak görünecek ve tünelden iner.
